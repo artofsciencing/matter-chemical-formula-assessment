@@ -575,38 +575,42 @@ function sendViaScript(payload) {
   return new Promise((resolve) => {
     const formUrl = "https://docs.google.com/forms/d/e/1FAIpQLSfboauC_El9IAjY0fBF03rsP0CS5cb481jJHcYJQclZVTUVpA/formResponse";
     const entryId = "entry.954009612";
-    const text = JSON.stringify(payload);
 
-    // Method 1: hidden iframe form POST to Google Forms (most reliable)
-    const iframe = document.createElement('iframe');
-    iframe.name = 'hidden_iframe';
-    iframe.style.display = 'none';
-    document.body.appendChild(iframe);
+    // Truncate to stay within Google Forms limits (500KB)
+    let text = JSON.stringify(payload);
+    if (text.length > 4000) text = text.substring(0, 4000) + '... [truncated]';
 
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = formUrl;
-    form.target = 'hidden_iframe';
-
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = entryId;
-    input.value = text;
-    form.appendChild(input);
-    document.body.appendChild(form);
-    form.submit();
-
-    // Method 2: fetch no-cors as backup
+    // Method 1: fetch no-cors with FormData
     const fd = new FormData();
     fd.append(entryId, text);
-    fetch(formUrl, { method: 'POST', mode: 'no-cors', body: fd }).catch(() => {});
+    fetch(formUrl, { method: 'POST', mode: 'no-cors', body: fd })
+      .catch(() => {});
 
-    // Resolve after short delay — form POST is fire-and-forget
-    setTimeout(() => {
-      document.body.removeChild(form);
-      document.body.removeChild(iframe);
-      resolve('✅ Results submitted to teacher successfully.');
-    }, 3000);
+    // Method 2: hidden iframe form POST as backup
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.name = 'hidden_iframe_' + Date.now();
+      iframe.style.cssText = 'display:none;width:0;height:0;border:0;';
+      document.body.appendChild(iframe);
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = formUrl;
+      form.target = iframe.name;
+      form.style.display = 'none';
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = entryId;
+      input.value = text;
+      form.appendChild(input);
+      document.body.appendChild(form);
+      form.submit();
+      setTimeout(() => {
+        try{ document.body.removeChild(form); document.body.removeChild(iframe); }catch(e){}
+      }, 5000);
+    } catch(e) {}
+
+    // Resolve after 4 seconds
+    setTimeout(() => resolve('✅ Results submitted to teacher successfully.'), 4000);
   });
 }
 
